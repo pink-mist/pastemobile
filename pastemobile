@@ -105,7 +105,7 @@ helper getpaste => sub {
 
     my ($ref, $sth);
     $sth = $self->db()->prepare_cached(
-        q{SELECT *, date_trunc('second', time) AS ts FROM pastes WHERE id = ?})
+        q{SELECT *, date_trunc('second', timezone('UTC', time)) AS ts FROM pastes WHERE id = ?})
         and $sth->execute($id)
         and $ref = $sth->fetchrow_hashref()
         or return 0;
