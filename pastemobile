@@ -1,0 +1,314 @@
+#!/opt/perl-5.18/bin/perl
+use Mojolicious::Lite;
+use Data::UUID;
+use Mojo::Util qw/ xml_escape /;
+use PPI;
+use PPI::HTML;
+
+plugin 'Config';
+
+plugin 'Database',
+    dsn      => 'dbi:Pg:dbname=paste',
+    options  => { AutoCommit => 1, RaiseError => 1 },
+    helper   => 'db';
+
+my $ug = Data::UUID->new();
+
+under sub {
+    my $self = shift;
+
+    $self->session(expiration => 604_800);
+    $self->session()->{uuid} //= $ug->create_str();
+    my $sth;
+    $sth = $self->db()->prepare_cached("DELETE FROM pastes WHERE time + interval '1 week' < now()")
+        and $sth->execute()
+        and $sth->finish();
+    return 1;
+};
+
+get '/' => sub {
+    my $self = shift;
+    $self->render('index');
+};
+
+get '/about' => sub { shift()->render('about'); };
+
+post '/add' => sub {
+    my $self = shift;
+    
+    my $id = $self->addpaste();
+    return $self->redirect_to("/$id") if $id;
+
+    $self->render('error');
+};
+
+get '/:id' => sub {
+    my $self = shift;
+    my $id   = $self->param('id');
+
+    return $self->render('error') unless $self->getpaste($id);
+
+    return $self->render('paste');
+};
+
+under '/:id' => sub {
+    my $self = shift;
+    my $id   = $self->param('id');
+
+    return 1 if $self->getpaste($id) and $self->stash('edit');
+
+    $self->render('error');
+    return undef;
+};
+
+get '/edit' => sub {
+    shift()->render('edit');
+};
+post '/edit' => sub {
+    my $self = shift;
+    my ($id, $paste, $ip) = (
+        $self->param('id'),
+        $self->param('paste'),
+        $self->tx()->remote_address());
+
+    my $syntax = $self->highlight($paste);
+
+    my $sth;
+    $sth = $self->db()->prepare_cached('UPDATE pastes SET text = ?, ip = ?, time = now(), syntax = ? WHERE id = ?')
+        and $sth->execute($paste, $ip, $syntax, $id)
+        and $sth->finish()
+        and return $self->redirect_to("/$id");
+
+    return $self->render('error');
+};
+
+get '/delete' => sub {
+    shift()->render('delete');
+};
+post '/delete' => sub {
+    my $self = shift;
+    my $id   = $self->param('id');
+
+    return $self->redirect_to("/$id") unless $self->param('delete');
+
+    my $sth;
+    $sth = $self->db()->prepare_cached('DELETE FROM pastes WHERE id = ?')
+        and $sth->execute($id)
+        and $sth->finish()
+        and return $self->render('deleted');
+
+    return $self->render('error');
+};
+
+helper getpaste => sub {
+    my $self = shift;
+    my $id   = shift;
+
+    my ($ref, $sth);
+    $sth = $self->db()->prepare_cached(
+        q{SELECT *, date_trunc('second', time) AS ts FROM pastes WHERE id = ?})
+        and $sth->execute($id)
+        and $ref = $sth->fetchrow_hashref()
+        or return 0;
+    $self->stash(id     => $ref->{id});
+    $self->stash(paste  => $ref->{text});
+    $self->stash(nick   => $ref->{nick});
+    $self->stash(date   => $ref->{ts});
+    $self->stash(ip     => $ref->{ip});
+    $self->stash(syntax => $ref->{syntax});
+    $self->stash(edit   => $ref->{auth} eq $self->session()->{uuid} ? 1 : 0);
+    $self->stash(hl     => $self->param('hl') || 0);
+    $self->stash(ln     => $self->param('ln') || 0);
+
+    $sth->finish();
+
+    return 1;
+};
+
+helper addpaste => sub {
+    my $self = shift;
+
+    my ($nick, $text, $ip, $auth) = (
+        $self->param('nick'),
+        $self->param('paste'),
+        $self->tx()->remote_address(),
+        $self->session()->{uuid});
+
+    my $syntax = $self->highlight($text);
+
+    my ($sth, $id);
+    $sth = $self->db()->prepare('INSERT INTO pastes (text, nick, ip, auth, syntax) VALUES (?, ?, ?, ?, ?) RETURNING id')
+        and $sth->execute($text, $nick, $ip, $auth, $syntax)
+        and $id = $sth->fetch()->[0];
+
+    $sth->finish() if defined $sth;
+    return $id;
+};
+
+helper paste => sub {
+    my $self  = shift;
+
+    my $paste = '';
+    if ($self->stash('hl')) {
+        $paste = $self->stash('syntax');
+    }
+    else {
+        my $text  = $self->stash('paste');
+           $text  =~ s/\r\n/\n/g;
+        my @lines = split /\n/, $text;
+        $paste   .= sprintf(qq{<span class="line">%s</span><br />\n}, xml_escape($_)) for @lines;
+        $paste    =~ s!(  +)!<span class="whitespace">$1</span>!g;
+    }
+
+    my $html = '';
+    if ($self->stash('ln')) {
+        my @lines = split /\n/, $paste;
+        my $width = length scalar @lines;
+        my $i     = 1;
+        $html    .= sprintf(qq{<span class="linenum whitespace">%*s: </span>%s\n}, $width, $i++, $_) for @lines;
+    }
+    else {
+        $html = $paste;
+    }
+    return $html;
+};
+
+helper highlight => sub {
+    my $self = shift;
+    my $text = shift;
+
+    my $html = PPI::HTML->new()->html( \$text );
+       $html =~ s!(  +)!<span class="whitespace">$1</span>!g;
+
+    return $html;
+};
+
+
+app->secrets(app->config()->{secrets});
+
+app->start;
+
+__DATA__
+
+@@ index.html.ep
+% layout 'default';
+% title 'Quick! To the PasteMobile!';
+%= form_for url_for('/add') => (method => 'post') => begin
+<label>
+Nickname:
+%= text_field 'nick'
+</label>
+<p></p>
+<label>
+Paste:<br />
+%= text_area 'paste'
+</label>
+<br />
+%= submit_button 'Paste!'
+%= end
+
+
+@@ paste.html.ep
+%layout 'default';
+%title "Paste $id";
+<div class="paste">
+    <div class="edit">
+        <%== link_to 'Line Numbers' => url_for->query(ln => !$ln, hl => $hl)->to_abs %> |
+        <%== link_to 'Perl Syntax Highlighting' => url_for->query(ln => $ln, hl => !$hl)->to_abs %> |
+        <%== link_to 'Raw' => "/$id.txt" %>
+    </div>
+    %== $edit ? sprintf('<div class="edit">%s | %s</div>', link_to(Edit => "/$id/edit"), link_to(Delete => "/$id/delete")) : '';
+    <div class="ip">From <%= $nick %> (<%= $ip %>) on <%= $date %></div>
+    <div class="data"><%== paste $paste %></div>
+</div>
+
+
+@@ paste.txt.ep
+%== $paste
+
+@@ about.html.ep
+%layout 'default';
+%title "The PasteMobile!";
+<div class="notice">
+    <p>The PasteMobile is built on <%= link_to Perl => 'http://www.perl.org/' %> and the <%= link_to Mojolicious => 'http://www.mojolicio.us/' %> web framework.</p>
+    <p>All pastes are deleted after a week since their last edit, and if you don't clear your cookies you will be able to edit or delete them yourself at any time inbetween.<br />
+    As long as the paste isn't deleted the ip and time you last edited the paste from will be stored in a database.</p>
+    <p>The admin reserves the right to delete any paste at any time for any (or no) reason.</p>
+</div>
+
+
+@@ edit.html.ep
+%layout 'default';
+%title "Edit $id";
+%= form_for url_for("/$id/edit") => (method => 'post')  => begin
+%= text_area 'paste' => begin
+<%= $paste %>
+%= end
+<br />
+%= submit_button 'Edit!'
+%= end
+
+
+@@ delete.html.ep
+%layout 'default';
+%title "Delete $id";
+%= form_for url_for("/$id/delete") => (method => 'post') => begin
+<label>
+%= check_box delete => 1
+Confirm delete!
+</label>
+<br />
+%= submit_button 'Confirm!'
+%= end
+
+
+@@ deleted.html.ep
+%layout 'default';
+%title "Deleted $id";
+<div class="notice">Paste deleted!</div>
+
+
+@@ error.html.ep
+%layout 'error';
+%title 'Paste not found';
+<p>This is not the paste you wanted, but the paste you deserve.</p>
+<p>Paste not found.</p>
+
+
+@@ not_found.html.ep
+%layout 'error';
+%title 'Page not found';
+<p>404 Not found</p>
+
+
+@@ exception.html.ep
+%layout 'error';
+%title 'The PasteMobile has blown up!';
+<p>Server error.</p>
+
+
+@@ layouts/error.html.ep
+%layout 'default';
+<div class="error">
+<%= content %>
+</div>
+
+
+@@ layouts/default.html.ep
+<!DOCTYPE html>
+<html>
+    <head>
+        <title><%= title %></title>
+        %= stylesheet '/res/style.css'
+    </head>
+    <body>
+
+<div class="menu">
+    <%= link_to 'The PasteMobile' => '/' %>
+    <%= link_to 'About' => '/about', class => 'about' %>
+</div>
+
+<%= content %>
+
+    </body>
+</html>

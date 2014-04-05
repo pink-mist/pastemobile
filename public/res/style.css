@@ -1,0 +1,58 @@
+.menu > a.about,
+.menu, form,
+form textarea    { display:          block; }
+
+.menu > a.about,
+div.edit         { float:            right;
+                   clear:            right; }
+
+html, body, form { height:           100%; }
+form textarea    { height:           70%; }
+
+form textarea    { width:            90%; }
+
+body > div, form { padding-left:     0.5em; }
+body > div, form { padding-right:    0.5em; }
+.menu            { padding-top:      0.5em; }
+.data            { padding:          15px; }
+
+form textarea    { margin-right:     auto; }
+html, body       { margin:           0 0 0 0; }
+.data            { margin-top:       1em; }
+.menu            { margin-bottom:    1em; }
+
+body             { font-family:      sans-serif; }
+.data            { font-family:      monospace; }
+
+a                { text-decoration:  none; }
+a:hover          { text-decoration:  underline; }
+
+.menu            { border-bottom:    1px dotted black; }
+
+.whitespace      { white-space:      pre; }
+
+.data            { border-radius:    10px; }
+
+.data            { background-color: #F8F8F8; }
+
+.linenum         { color:            #4d4d4d; }
+.cast            { color:            #339999; }
+.comment         { color:            #008080; }
+.core            { color:            #FF0000; }
+.double          { color:            #999999; }
+.heredoc_content { color:            #FF0000; }
+.interpolate     { color:            #999999; }
+.keyword         { color:            #BD2E2A; }
+.literal         { color:            #999999; }
+.magic           { color:            #0099FF; }
+.match           { color:            #9900FF; }
+.number          { color:            #990000; }
+.operator        { color:            #DD7700; }
+.pod             { color:            #008080; }
+.pragma          { color:            #A33AF7; }
+.regex           { color:            #9900FF; }
+.single          { color:            #FF33FF; }
+.substitute      { color:            #9900FF; }
+.symbol          { color:            #389A7D; }
+.transliterate   { color:            #9900FF; }
+.word            { color:            #999999; }
