@@ -1,8 +1,7 @@
-#!/opt/perl-5.18/bin/perl
+#!/usr/bin/env perl
 use Mojolicious::Lite;
 use Data::UUID;
 use Mojo::Util qw/ xml_escape /;
-use PPI;
 use PPI::HTML;
 
 plugin 'Config';
