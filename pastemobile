@@ -117,7 +117,7 @@ helper getpaste => sub {
     $self->stash(syntax => $ref->{syntax});
     $self->stash(edit   => $ref->{auth} eq $self->session()->{uuid} ? 1 : 0);
     $self->stash(hl     => $self->param('hl') || 0);
-    $self->stash(ln     => $self->param('ln') || 0);
+    $self->stash(ln     => $self->param('ln') // 1);
 
     $sth->finish();
 
