@@ -162,9 +162,8 @@ helper paste => sub {
     my $html = '';
     if ($self->stash('ln')) {
         my @lines = split /\n/, $paste;
-        my $width = length scalar @lines;
-        my $i     = 1;
-        $html    .= sprintf(qq{<span class="linenum whitespace">%*s: </span>%s\n}, $width, $i++, $_) for @lines;
+        $html    .= sprintf(qq{<li class="linenum">%s</li>\n}, $_) for @lines;
+        $html     = qq{<ol>$html</ol>};
     }
     else {
         $html = $paste;

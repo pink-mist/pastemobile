@@ -17,7 +17,7 @@ body > div, form { padding-right:    0.5em; }
 .data            { padding:          15px; }
 
 form textarea    { margin-right:     auto; }
-html, body       { margin:           0 0 0 0; }
+html, body, ol   { margin:           0 0 0 0; }
 .data            { margin-top:       1em; }
 .menu            { margin-bottom:    1em; }
 
@@ -35,7 +35,6 @@ a:hover          { text-decoration:  underline; }
 
 .data            { background-color: #F8F8F8; }
 
-.linenum         { color:            #4d4d4d; }
 .cast            { color:            #339999; }
 .comment         { color:            #008080; }
 .core            { color:            #FF0000; }
