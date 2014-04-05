@@ -229,6 +229,7 @@ Paste:<br />
 %title "The PasteMobile!";
 <div class="notice">
     <p>The PasteMobile is built on <%= link_to Perl => 'http://www.perl.org/' %> and the <%= link_to Mojolicious => 'http://www.mojolicio.us/' %> web framework.</p>
+    <p>The code running the site can be found on <%= link_to GitHub => 'https://github.com/pink-mist/pastemobile' %>.</p>
     <p>All pastes are deleted after a week since their last edit, and if you don't clear your cookies you will be able to edit or delete them yourself at any time inbetween.<br />
     As long as the paste isn't deleted the ip and time you last edited the paste from will be stored in a database.</p>
     <p>The admin reserves the right to delete any paste at any time for any (or no) reason.</p>
