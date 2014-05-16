@@ -175,7 +175,7 @@ helper highlight => sub {
     my $self = shift;
     my $text = shift;
 
-    my $html = PPI::HTML->new()->html( \$text );
+    my $html = PPI::HTML->new()->html( \$text ) // xml_escape($text);
        $html =~ s!(  +)!<span class="whitespace">$1</span>!g;
 
     return $html;
