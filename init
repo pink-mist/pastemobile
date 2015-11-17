@@ -1,0 +1,24 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use DBI;
+
+my $dbname = shift // 'paste';
+
+system 'createdb', $dbname;
+
+my $dbh = DBI->connect("dbi:Pg:dbname=$dbname", '', '', {AutoCommit=>1, RaiseError=>1});
+
+$dbh->do(<<"SQL");
+CREATE TABLE pastes (
+    id SERIAL PRIMARY KEY,
+    text TEXT NOT NULL,
+    nick TEXT NOT NULL,
+    ip INET NOT NULL,
+    auth UUID NOT NULL,
+    time TIMESTAMP NOT NULL DEFAULT now(),
+    syntax TEXT NOT NULL
+);
+SQL
