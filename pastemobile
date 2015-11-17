@@ -3,13 +3,14 @@ use Mojolicious::Lite;
 use Data::UUID;
 use Mojo::Util qw/ xml_escape /;
 use PPI::HTML;
+use Mojo::Pg;
 
-plugin 'Config';
+my $config = plugin 'Config';
 
-plugin 'Database',
-    dsn      => 'dbi:Pg:dbname=paste',
-    options  => { AutoCommit => 1, RaiseError => 1 },
-    helper   => 'db';
+helper pg => sub {
+    my $self = shift;
+    state $pg = Mojo::Pg->new->dsn('dbi:Pg:dbname=' . ($config->{dbname} // 'paste'));
+};
 
 my $ug = Data::UUID->new();
 
@@ -18,10 +19,7 @@ under sub {
 
     $self->session(expiration => 604_800);
     $self->session()->{uuid} //= $ug->create_str();
-    my $sth;
-    $sth = $self->db()->prepare_cached("DELETE FROM pastes WHERE time + interval '1 week' < now()")
-        and $sth->execute()
-        and $sth->finish();
+    $self->pg->db->query("DELETE FROM pastes WHERE time + interval '1 week' < now()");
     return 1;
 };
 
@@ -56,6 +54,7 @@ under '/:id' => sub {
 
     return 1 if $self->getpaste($id) and $self->stash('edit');
 
+
     $self->render('error');
     return undef;
 };
@@ -72,10 +71,7 @@ post '/edit' => sub {
 
     my $syntax = $self->highlight($paste);
 
-    my $sth;
-    $sth = $self->db()->prepare_cached('UPDATE pastes SET text = ?, ip = ?, time = now(), syntax = ? WHERE id = ?')
-        and $sth->execute($paste, $ip, $syntax, $id)
-        and $sth->finish()
+    $self->pg->db->query('UPDATE pastes SET text = ?, ip = ?, time = now(), syntax = ? WHERE id = ?', $paste, $ip, $syntax, $id)
         and return $self->redirect_to("/$id");
 
     return $self->render('error');
@@ -90,10 +86,7 @@ post '/delete' => sub {
 
     return $self->redirect_to("/$id") unless $self->param('delete');
 
-    my $sth;
-    $sth = $self->db()->prepare_cached('DELETE FROM pastes WHERE id = ?')
-        and $sth->execute($id)
-        and $sth->finish()
+    $self->pg->db->query('DELETE FROM pastes WHERE id = ?', $id)
         and return $self->render('deleted');
 
     return $self->render('error');
@@ -103,23 +96,19 @@ helper getpaste => sub {
     my $self = shift;
     my $id   = shift;
 
-    my ($ref, $sth);
-    $sth = $self->db()->prepare_cached(
-        q{SELECT *, date_trunc('second', timezone('UTC', time)) AS ts FROM pastes WHERE id = ?})
-        and $sth->execute($id)
-        and $ref = $sth->fetchrow_hashref()
+    my $res = $self->pg->db->query(
+        q{SELECT *, date_trunc('second', timezone('UTC', time)) AS ts FROM pastes WHERE id = ?}, $id)
         or return 0;
+    my $ref = $res->hash() or return 0;
     $self->stash(id     => $ref->{id});
     $self->stash(paste  => $ref->{text});
     $self->stash(nick   => $ref->{nick});
     $self->stash(date   => $ref->{ts});
     $self->stash(ip     => $ref->{ip});
     $self->stash(syntax => $ref->{syntax});
-    $self->stash(edit   => $ref->{auth} eq $self->session()->{uuid} ? 1 : 0);
+    $self->stash(edit   => lc($ref->{auth}) eq lc($self->session()->{uuid}) ? 1 : 0);
     $self->stash(hl     => $self->param('hl') || 0);
     $self->stash(ln     => $self->param('ln') // 1);
-
-    $sth->finish();
 
     return 1;
 };
@@ -135,12 +124,8 @@ helper addpaste => sub {
 
     my $syntax = $self->highlight($text);
 
-    my ($sth, $id);
-    $sth = $self->db()->prepare('INSERT INTO pastes (text, nick, ip, auth, syntax) VALUES (?, ?, ?, ?, ?) RETURNING id')
-        and $sth->execute($text, $nick, $ip, $auth, $syntax)
-        and $id = $sth->fetch()->[0];
-
-    $sth->finish() if defined $sth;
+    my $res = $self->pg->db->query('INSERT INTO pastes (text, nick, ip, auth, syntax) VALUES (?, ?, ?, ?, ?) RETURNING id', $text, $nick, $ip, $auth, $syntax);
+    my $id = $res->hash->{id};
     return $id;
 };
 
@@ -182,7 +167,7 @@ helper highlight => sub {
 };
 
 
-app->secrets(app->config()->{secrets});
+app->secrets($config->{secrets});
 
 app->start;
 
